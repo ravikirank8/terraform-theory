@@ -1,0 +1,166 @@
+# 📦 Terraform 3-Tier Architecture using Modules + Load Balancer + Auto Scaling + Workspaces (Multi-Env Ready)
+
+# ✅ Folder Structure:
+# ├── main.tf
+# ├── variables.tf
+# ├── outputs.tf
+# ├── backend.tf
+# ├── modules/
+# │   ├── vpc/
+# │   ├── subnet/
+# │   ├── sg/
+# │   ├── ec2/
+# │   ├── alb/
+# │   └── asg/
+
+# 🚀 Root Module additions for Load Balancer and Auto Scaling
+
+module "alb" {
+  source           = "./modules/alb"
+  vpc_id           = module.vpc.vpc_id
+  public_subnet_ids = module.subnets.public_subnet_ids
+  sg_id            = module.security_groups.web_sg_id
+  tags             = var.tags
+}
+
+module "autoscaling" {
+  source           = "./modules/asg"
+  ami              = var.ami_id
+  instance_type    = var.instance_type
+  subnet_ids       = module.subnets.private_subnet_ids
+  sg_id            = module.security_groups.web_sg_id
+  alb_target_group = module.alb.target_group_arn
+  desired_capacity = 2
+  min_size         = 1
+  max_size         = 4
+  name             = "asg-web-tier"
+  tags             = var.tags
+}
+
+# 🪣 backend.tf (for remote state per workspace)
+terraform {
+  backend "s3" {
+    bucket         = "my-tf-states"
+    key            = "3tier-app/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
+}
+
+# 👥 Workspaces usage (CLI commands)
+# terraform workspace new dev
+# terraform workspace select prod
+
+##############################################
+# MODULE: ALB (modules/alb)
+##############################################
+# main.tf
+resource "aws_lb" "this" {
+  name               = "web-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [var.sg_id]
+  subnets            = var.public_subnet_ids
+
+  tags = merge(var.tags, { Name = "web-alb" })
+}
+
+resource "aws_lb_target_group" "this" {
+  name     = "web-target-group"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 2
+  }
+
+  tags = var.tags
+}
+
+resource "aws_lb_listener" "this" {
+  load_balancer_arn = aws_lb.this.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this.arn
+  }
+}
+
+# variables.tf
+variable "vpc_id" {}
+variable "public_subnet_ids" { type = list(string) }
+variable "sg_id" {}
+variable "tags" { type = map(string) }
+
+# outputs.tf
+output "alb_dns_name" {
+  value = aws_lb.this.dns_name
+}
+
+output "target_group_arn" {
+  value = aws_lb_target_group.this.arn
+}
+
+##############################################
+# MODULE: ASG (modules/asg)
+##############################################
+# main.tf
+resource "aws_launch_template" "this" {
+  name_prefix   = var.name
+  image_id      = var.ami
+  instance_type = var.instance_type
+
+  network_interfaces {
+    associate_public_ip_address = false
+    security_groups             = [var.sg_id]
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(var.tags, { Name = var.name })
+  }
+}
+
+resource "aws_autoscaling_group" "this" {
+  desired_capacity     = var.desired_capacity
+  max_size             = var.max_size
+  min_size             = var.min_size
+  vpc_zone_identifier  = var.subnet_ids
+  target_group_arns    = [var.alb_target_group]
+  launch_template {
+    id      = aws_launch_template.this.id
+    version = "$Latest"
+  }
+  tag {
+    key                 = "Name"
+    value               = var.name
+    propagate_at_launch = true
+  }
+}
+
+# variables.tf
+variable "ami" {}
+variable "instance_type" {}
+variable "subnet_ids" { type = list(string) }
+variable "sg_id" {}
+variable "alb_target_group" {}
+variable "desired_capacity" {}
+variable "min_size" {}
+variable "max_size" {}
+variable "name" {}
+variable "tags" { type = map(string) }
+
+# outputs.tf
+output "asg_name" {
+  value = aws_autoscaling_group.this.name
+}
