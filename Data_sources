@@ -1,0 +1,244 @@
+What is a Data Source in Terraform?
+A data source in Terraform is used to read or fetch information from existing infrastructure, instead of creating something new.
+
+Think of it like reading data, not writing it.
+
+  🔹 Why Use Data Sources?
+You use data sources when you need to reference existing resources (e.g., a VPC, an AMI, a subnet, a security group) created outside your Terraform code — 
+  maybe they were created manually, by another team, or in a different Terraform module.
+
+    🔹 Simple Analogy
+🧠 Real-Life Example:
+You’re building a house (your infrastructure).
+But the water line (a VPC) is already connected by the city.
+Instead of digging your own well, you just want to use the city’s water line.
+
+So, you ask the city:
+
+“What’s the ID of the water line on my street?”
+
+That’s exactly what a data source does.
+
+data "aws_vpc" "default" {
+  default = true
+}
+“Hey AWS, give me details of the default VPC in this region.”
+
+========================
+  ✅ Real-Time Use Case:
+"Deploy an EC2 instance inside a pre-existing VPC, using the latest AMI, and attach an existing security group."
+
+This is a very common scenario in production where:
+The VPC and Security Groups are managed by a network/security team.
+The AMI is built by the DevOps/CI pipeline team.
+Your job is just to deploy the app server using Terraform.
+
+📁 Full Working Code with Comments
+
+# Step 1: Configure the AWS provider
+provider "aws" {
+  region = "us-east-1"
+}
+✅ What it does: Tells Terraform to use AWS in the us-east-1 region.
+
+
+# Step 2: Fetch the existing VPC by name
+data "aws_vpc" "existing_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["prod-vpc"]
+  }
+}
+✅ What it does:
+Fetches the VPC tagged prod-vpc.
+This VPC is already created by the infra/network team.
+
+
+# Step 3: Fetch the latest AMI for the application
+data "aws_ami" "latest_ami" {
+  most_recent = true
+  owners      = ["self"]  # AMIs built by your team
+
+  filter {
+    name   = "name"
+    values = ["myapp-*"]  # Matches names like "myapp-2025-07-01"
+  }
+}
+✅ What it does:
+Gets the most recent AMI built for your app. Useful if your CI/CD pipeline builds new AMIs with new versions of the app.
+
+# Step 4: Get the existing Security Group for web access
+data "aws_security_group" "web_sg" {
+  name = "web-allow-http-https"
+}
+✅ What it does:
+Fetches an existing security group that already allows port 80 and 443 access.
+This security group was likely created by the security team.
+
+# Step 5: Launch EC2 instance using above data sources
+resource "aws_instance" "web_server" {
+  ami                    = data.aws_ami.latest_ami.id
+  instance_type          = "t3.micro"
+  subnet_id              = data.aws_vpc.existing_vpc.default_subnet_id
+  vpc_security_group_ids = [data.aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "prod-web-server"
+  }
+}
+✅ What it does:
+Launches an EC2 instance with:
+The latest AMI (myapp-*)
+An existing subnet from the VPC
+The existing security group that allows HTTP/S
+Tags it as prod-web-server for clarity.
+
+🎯 Key Benefits in Production
+| 🔍 Component              | 💡 Benefit in Production                                 |
+| ------------------------- | -------------------------------------------------------- |
+| `data.aws_vpc`            | Reuses central VPC managed by infra team                 |
+| `data.aws_ami`            | Always picks latest tested image                         |
+| `data.aws_security_group` | Avoids re-creating security settings (audit, compliance) |
+| EC2 Resource              | App gets deployed consistently across environments       |
+✅ Real-World Use Case:
+"I need to launch an EC2 instance and attach an existing security group that was created in another module or by another team."
+
+======================================
+  
+🧱 Your Setup (Realistic)
+Security group is already created with name: web-allow-http-https
+VPC is already created with name: prod-vpc
+You only want to reference these existing resources using data sources
+
+✅ Complete Working Code Using Data Sources
+provider "aws" {
+  region = "us-east-1"
+}
+
+🔍 Step 1: Get Existing VPC by Name
+
+data "aws_vpc" "prod_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["prod-vpc"]
+  }
+}
+
+✅ This reads the existing VPC (not creating it).
+
+🔍 Step 2: Get Existing Security Group by Name
+
+data "aws_security_group" "web_sg" {
+  name   = "web-allow-http-https"
+  vpc_id = data.aws_vpc.prod_vpc.id
+}
+
+✅ This fetches the security group by name and filters by VPC ID.
+📌 This is best practice — use vpc_id to make sure it fetches the right SG, especially if name is reused across VPCs.
+
+🚀 Step 3: Launch EC2 Instance Using the Data Sources
+
+resource "aws_instance" "web_server" {
+  ami                    = "ami-1234567890abcdef0"  # Use a valid AMI ID
+  instance_type          = "t2.micro"
+  subnet_id              = data.aws_vpc.prod_vpc.default_network_acl_id # OR use a specific subnet if needed
+  vpc_security_group_ids = [data.aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "web-server-using-existing-sg"
+  }
+}
+✅ This instance:
+
+Uses the existing security group
+Uses the existing VPC
+Does not create or import anything from outside
+  
+📦 Output (Optional)
+You can also print the instance's public IP:
+output "ec2_public_ip" {
+  value = aws_instance.web_server.public_ip
+}
+
+You safely deploy an EC2 instance inside a shared production environment by reading existing infrastructure (VPC, AMI, SG) using Terraform data sources — making your deployment modular, compliant, and DevOps-friendly.
+
+=======================
+
+🧱 Your Setup (Realistic)
+Security group is already created with name: web-allow-http-https
+
+VPC is already created with name: prod-vpc
+You only want to reference these existing resources using data sources
+
+✅ Complete Working Code Using Data Sources
+
+provider "aws" {
+  region = "us-east-1"
+}
+🔍 Step 1: Get Existing VPC by Name
+
+data "aws_vpc" "prod_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["prod-vpc"]
+  }
+}
+✅ This reads the existing VPC (not creating it).
+
+🔍 Step 2: Get Existing Security Group by Name
+
+data "aws_security_group" "web_sg" {
+  name   = "web-allow-http-https"
+  vpc_id = data.aws_vpc.prod_vpc.id
+}
+✅ This fetches the security group by name and filters by VPC ID.
+
+📌 This is best practice — use vpc_id to make sure it fetches the right SG, especially if name is reused across VPCs.
+
+🚀 Step 3: Launch EC2 Instance Using the Data Sources
+
+resource "aws_instance" "web_server" {
+  ami                    = "ami-1234567890abcdef0"  # Use a valid AMI ID
+  instance_type          = "t2.micro"
+  subnet_id              = data.aws_vpc.prod_vpc.default_network_acl_id # OR use a specific subnet if needed
+  vpc_security_group_ids = [data.aws_security_group.web_sg.id]
+
+  tags = {
+    Name = "web-server-using-existing-sg"
+  }
+}
+
+✅ This instance:
+
+Uses the existing security group
+Uses the existing VPC
+Does not create or import anything from outside
+✅ Summary in Plain English
+  | What You Want                      | What You Do in Terraform                       |
+| ---------------------------------- | ---------------------------------------------- |
+| Use existing VPC                   | Use `data "aws_vpc"` to read it                |
+| Use existing Security Group        | Use `data "aws_security_group"` to read it     |
+| Attach existing SG to EC2 instance | Use `data.aws_security_group.web_sg.id` in EC2 |
+
+  🧠 Extra Tip: If SG is in another module
+
+  If the SG is created by another Terraform module (e.g., networking module), that module should expose it like this:
+  
+# Inside the networking module
+output "web_sg_id" {
+  value = aws_security_group.web_sg.id
+}
+Then in your current module:
+
+
+module "networking" {
+  source = "../networking"
+}
+
+resource "aws_instance" "web_server" {
+  ami                    = "ami-xxx"
+  instance_type          = "t2.micro"
+  vpc_security_group_ids = [module.networking.web_sg_id]
+}
+But if you don’t have access to that module and only want to read from AWS, stick with the data block approach like above.
+
