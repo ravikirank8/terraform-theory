@@ -1,0 +1,186 @@
+# 📦 Terraform 3-Tier Architecture with ALB + ASG + RDS + Monitoring + Workspaces (Explained in Plain English)
+
+# ✅ Structure
+# ├── main.tf        ← Connects and wires everything together
+# ├── variables.tf   ← Defines input variables
+# ├── outputs.tf     ← Defines what outputs are returned
+# ├── backend.tf     ← Configures remote backend (optional)
+# ├── modules/
+# │   ├── vpc/
+# │   ├── subnet/
+# │   ├── sg/
+# │   ├── ec2/
+# │   ├── alb/
+# │   ├── asg/
+# │   ├── rds/
+# │   └── monitoring/
+
+##############################################
+# MODULE: RDS (modules/rds) – Creates a MySQL/Postgres DB in private subnets
+##############################################
+
+# 🧱 main.tf
+resource "aws_db_subnet_group" "this" {
+  name       = "db-subnet-group"                         # Name of DB subnet group
+  subnet_ids = var.private_subnet_ids                    # Use private subnets for database
+  tags       = var.tags                                  # Attach tags for visibility
+}
+
+resource "aws_db_instance" "this" {
+  identifier              = var.name                     # Unique DB instance name
+  engine                  = var.engine                   # DB engine (mysql, postgres)
+  engine_version          = var.engine_version           # Engine version (e.g. 8.0)
+  instance_class          = var.instance_class           # Instance type (e.g. db.t3.micro)
+  allocated_storage       = var.storage                  # Size in GB
+  db_name                 = var.db_name                  # Initial database name
+  username                = var.username                 # DB master username
+  password                = var.password                 # DB master password
+  vpc_security_group_ids  = [var.sg_id]                  # Security group for access control
+  db_subnet_group_name    = aws_db_subnet_group.this.name
+  skip_final_snapshot     = true                         # Avoid final snapshot (only for dev)
+  tags = merge(var.tags, { Name = var.name })            # Add a name tag
+}
+
+# 📥 variables.tf
+variable "name" {}
+variable "engine" {}
+variable "engine_version" {}
+variable "instance_class" {}
+variable "storage" {}
+variable "db_name" {}
+variable "username" {}
+variable "password" {}
+variable "private_subnet_ids" { type = list(string) }
+variable "sg_id" {}
+variable "tags" { type = map(string) }
+
+# 📤 outputs.tf
+output "db_endpoint" {
+  value = aws_db_instance.this.endpoint                  # Returns the DB connection string
+}
+
+##############################################
+# MODULE: MONITORING (modules/monitoring) – Alerts + logs for EC2 instances
+##############################################
+
+# 🧱 main.tf
+resource "aws_cloudwatch_log_group" "this" {
+  name              = "/ec2/bootstrap"                  # Log group for EC2 init logs
+  retention_in_days = 7                                 # Keep logs for 7 days
+  tags              = var.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "cpu_alarm" {
+  alarm_name          = "HighCPU"                       # Name of the alarm
+  comparison_operator = "GreaterThanThreshold"         # Trigger when above threshold
+  evaluation_periods  = 2                               # Needs to breach for 2 periods
+  metric_name         = "CPUUtilization"               # Metric to track
+  namespace           = "AWS/EC2"
+  period              = 120                             # 2-minute periods
+  statistic           = "Average"
+  threshold           = 70                              # Threshold set to 70%
+  alarm_description   = "Alarm when CPU > 70%"
+  dimensions = {
+    AutoScalingGroupName = var.asg_name                 # Attach alarm to specific ASG
+  }
+  alarm_actions = [var.sns_topic_arn]                   # Send to SNS topic
+  tags = var.tags
+}
+
+# 📥 variables.tf
+variable "asg_name" {}
+variable "sns_topic_arn" {}
+variable "tags" { type = map(string) }
+
+# 📤 outputs.tf
+output "log_group_name" {
+  value = aws_cloudwatch_log_group.this.name
+}
+
+##############################################
+# MODULE: ASG (modules/asg) – Auto Scaling Group + EC2 + bootstrap
+##############################################
+
+# 🧱 main.tf
+resource "aws_launch_template" "this" {
+  name_prefix   = var.name
+  image_id      = var.ami                                # AMI to use for EC2
+  instance_type = var.instance_type                      # EC2 type
+  user_data     = base64encode(file(var.user_data_file)) # Bootstrap shell script
+
+  network_interfaces {
+    associate_public_ip_address = false                  # Private subnet only
+    security_groups             = [var.sg_id]            # SG to control access
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(var.tags, { Name = var.name }) # Tag all instances
+  }
+}
+
+resource "aws_autoscaling_group" "this" {
+  desired_capacity     = var.desired_capacity            # How many instances to run
+  max_size             = var.max_size
+  min_size             = var.min_size
+  vpc_zone_identifier  = var.subnet_ids
+  target_group_arns    = [var.alb_target_group]          # Attach to load balancer
+  launch_template {
+    id      = aws_launch_template.this.id
+    version = "$Latest"
+  }
+  tag {
+    key                 = "Name"
+    value               = var.name
+    propagate_at_launch = true                           # Tag each EC2 instance
+  }
+}
+
+# 📥 variables.tf
+variable "ami" {}
+variable "instance_type" {}
+variable "subnet_ids" { type = list(string) }
+variable "sg_id" {}
+variable "alb_target_group" {}
+variable "desired_capacity" {}
+variable "min_size" {}
+variable "max_size" {}
+variable "name" {}
+variable "user_data_file" {}
+variable "tags" { type = map(string) }
+
+# 📤 outputs.tf
+output "asg_name" {
+  value = aws_autoscaling_group.this.name                # Used in monitoring
+}
+
+##############################################
+# 📌 Root module usage (main.tf)
+##############################################
+
+module "rds" {
+  source             = "./modules/rds"
+  name               = "prod-db"
+  engine             = "mysql"
+  engine_version     = "8.0"
+  instance_class     = "db.t3.micro"
+  storage            = 20
+  db_name            = "prodapp"
+  username           = "admin"
+  password           = var.db_password
+  private_subnet_ids = module.subnets.private_subnet_ids
+  sg_id              = module.security_groups.web_sg_id
+  tags               = var.tags
+}
+
+module "monitoring" {
+  source        = "./modules/monitoring"
+  asg_name      = module.autoscaling.asg_name
+  sns_topic_arn = var.sns_topic_arn
+  tags          = var.tags
+}
+
+# 🔐 Variables passed from root variables.tf
+variable "db_password" {}
+variable "sns_topic_arn" {}
+variable "user_data_file" { default = "scripts/bootstrap.sh" }
