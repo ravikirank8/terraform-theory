@@ -9,3 +9,46 @@ Make code cleaner and easier to read
 
 Group logic or calculations in one place
 
+✅ Syntax of locals
+locals {
+  name         = "web-app"
+  environment  = "dev"
+  full_name    = "${local.name}-${local.environment}"
+}
+
+🧩 Summary: Local Values in Terraform
+| Feature       | Description                         |
+| ------------- | ----------------------------------- |
+| Defined with  | `locals {}` block                   |
+| Used as       | `local.<name>`                      |
+| Purpose       | Clean, reusable logic & expressions |
+| Not persisted | Only used inside the current module |
+
+Example : 
+
+🧾 This will create an S3 bucket like:
+myproject-us-east-1-bucket
+
+variable "region" {
+  default = "us-east-1"
+}
+
+locals {
+  project_name = "myproject"
+  bucket_name  = "${local.project_name}-${var.region}-bucket"
+}
+
+resource "aws_s3_bucket" "example" {
+  bucket = local.bucket_name
+  acl    = "private"
+}
+
+🎯 Why Use locals?
+
+
+| ✅ Benefit          | 💬 Explanation                               |
+| ------------------ | -------------------------------------------- |
+| Reuse logic        | Define once, use multiple times              |
+| Clean code         | Replace long/complex expressions             |
+| Easier to maintain | Update in one place instead of many          |
+| Helpful in loops   | Preprocess lists/maps for `for_each`/`count` |
