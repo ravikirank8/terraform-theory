@@ -1,0 +1,98 @@
+| Provisioner   | Runs on      | Use Case                                    |
+| ------------- | ------------ | ------------------------------------------- |
+| `remote-exec` | Remote host  | Run setup commands like installing packages |
+| `file`        | Remote host  | Copy files to instance                      |
+| `local-exec`  | Your machine | Trigger local shell scripts, logging        |
+
+🧠 What are Provisioners?
+Provisioners in Terraform are used to run scripts or commands on a resource after it's been created.
+
+You can think of them like post-deployment setup scripts — for example:
+Installing software on an EC2 instance
+Copying files
+Running configuration commands (like setting up Docker or Nginx)
+
+Terraform's creators recommend avoiding provisioners for critical production tasks because:
+
+They're not idempotent (can run more than once)
+Hard to troubleshoot
+Can cause unpredictable behavior if the command fails
+===========
+
+🛠️ Types of Provisioners
+1. remote-exec – Run commands on the remote server
+
+resource "aws_instance" "web" {
+  ami           = "ami-123456"
+  instance_type = "t2.micro"
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt update",
+      "sudo apt install -y nginx",
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("~/.ssh/id_rsa")
+    host        = self.public_ip
+  }
+}
+
+2. file – Copy files to a remote machine
+provisioner "file" {
+  source      = "script.sh"
+  destination = "/tmp/script.sh"
+}
+========
+3. local-exec – Run a command locally on your machine (not on the remote server)
+
+provisioner "local-exec" {
+  command = "echo ${self.public_ip} >> server_ips.txt"
+}
+This can be useful for post-deploy logging or triggering another process.
+========
+
+🧪 Full Example: EC2 with remote-exec
+resource "aws_instance" "web" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "t2.micro"
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo yum update -y",
+      "sudo yum install -y httpd",
+      "sudo systemctl start httpd",
+      "echo 'Hello from Terraform' > /var/www/html/index.html"
+    ]
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file("~/.ssh/id_rsa")
+    host        = self.public_ip
+  }
+}
+
+🧯 Error Handling: on_failure
+You can specify what to do if a provisioner fails:
+
+provisioner "remote-exec" {
+  inline     = ["command that might fail"]
+  on_failure = "continue"  # or "fail"
+}
+=========================================
+⚠️ When to Use (and When Not to)
+| ✅ Use Provisioners When...             | ❌ Don’t Use When...                         |
+| -------------------------------------- | ------------------------------------------- |
+| Quick setup of demo/test infra         | Full production automation                  |
+| Installing software post-create        | You can use AMIs or userdata instead        |
+| Simple one-time tasks                  | You need idempotent (safe to repeat) setups |
+| No config management tool is available | You can use Ansible, Chef, etc.             |
+
+
+
+
