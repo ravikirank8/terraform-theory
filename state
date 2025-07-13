@@ -101,3 +101,71 @@ provider "registry.terraform.io/hashicorp/aws" {
 In production, you may pin provider versions to avoid unexpected bugs:
 You test infrastructure changes with version 5.10.0 of the AWS provider.
 Lock file ensures no one accidentally upgrades to 5.11.0 without testing.
+
+
+🔁 Migration Steps to Remote State (One-Time)
+
+☑️ S3 bucket has versioning and encryption enabled.
+☑️ DynamoDB table has LockID as partition key.
+
+1. ✅ Configure Remote Backend (S3 + DynamoDB)
+terraform {
+  backend "s3" {
+    bucket         = "company-terraform-state"
+    key            = "prod/main.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+
+
+2. ✅ Run Migration
+
+cd envs/prod
+terraform init
+# Accept the prompt to migrate local state
+    dynamodb_table = "terraform-lock-table"
+  }
+}
+
+🔄 Use in CI/CD (GitHub Actions Example)
+name: Terraform Apply
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Init Terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -out=plan.out
+
+      - name: Terraform Apply
+        run: terraform apply plan.out
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+
+🔐 Secrets and State Protection
+| Feature              | Implementation                           |
+| -------------------- | ---------------------------------------- |
+| **State encryption** | S3 Bucket encryption (AES256 / KMS)      |
+| **State locking**    | DynamoDB lock table                      |
+| **Access control**   | IAM policies restrict S3/DynamoDB access |
+| **Secrets**          | Stored in AWS Secrets Manager or Vault   |
+
+
+📦 Dependency Locking (.terraform.lock.hcl)
+provider "aws" {
+  version = ">= 5.0.0"
+  region  = var.aws_region
+}
