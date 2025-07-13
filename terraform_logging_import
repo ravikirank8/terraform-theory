@@ -1,0 +1,81 @@
+| Log Level | Detail Level                            | Use Case                |
+| --------- | --------------------------------------- | ----------------------- |
+| `TRACE`   | 🔴 Highest – shows everything           | Deep debugging          |
+| `DEBUG`   | 🟠 High – includes useful internal info | General troubleshooting |
+| `INFO`    | 🟡 Medium – shows general progress info | Monitoring              |
+| `WARN`    | 🔵 Low – only warnings                  | Light logs              |
+| `ERROR`   | ⚫ Lowest – only errors                  | Critical failures only  |
+
+| Scenario                     | Use Logging? | Level |
+| ---------------------------- | ------------ | ----- |
+| Terraform plan/apply fails   | ✅            | DEBUG |
+| Resource not updating        | ✅            | TRACE |
+| You're developing a module   | ✅            | INFO  |
+| General usage (working fine) | ❌            | N/A   |
+
+🧪 Example: Enable Logging
+
+export TF_LOG=DEBUG
+terraform plan
+
+Log to file
+export TF_LOG=DEBUG
+export TF_LOG_PATH=terraform-debug.log
+terraform apply
+
+turnoff
+unset TF_LOG
+unset TF_LOG_PATH
+
+=================
+
+ What is terraform import?
+terraform import is a command that brings an existing resource (already created outside of Terraform) into Terraform state.
+
+💡 It does not create or modify the resource — it just tells Terraform:
+“Hey, this resource already exists. Start managing it.”
+
+🛠️ Why Use terraform import?
+Use terraform import when:
+
+You manually created resources in AWS, Azure, etc., and now want Terraform to manage them.
+
+You're adopting Terraform in an existing infrastructure.
+
+You accidentally deleted the state file but the resources still exist.
+
+ Example: Import an AWS EC2 Instance
+Let’s say you already have an EC2 instance with ID i-0abc123def456gh78.
+
+Step 1: Define the resource in your Terraform config
+
+resource "aws_instance" "my_ec2" {
+  # You don’t need to fill all attributes for import,
+  # but after import, Terraform will want all required fields
+}
+
+
+Step 2: Run the import command
+
+resource "aws_instance" "my_ec2" {
+  # You don’t need to fill all attributes for import,
+  # but after import, Terraform will want all required fields
+}
+
+
+⚠️ Important Notes
+terraform import only adds the resource to the state file, not to the .tf files.
+
+After importing, run:
+
+terraform plan
+Terraform will show a diff if your .tf file doesn't fully match the actual resource config.
+
+You may need to update your .tf file to match the real resource settings.
+
+| Scenario                                    | Use `import`?                |
+| ------------------------------------------- | ---------------------------- |
+| You have a manually created S3 bucket       | ✅                            |
+| Migrating old infrastructure into Terraform | ✅                            |
+| Re-adding a resource lost from state        | ✅                            |
+| You want to recreate a resource             | ❌ (Use `taint` or `destroy`) |
