@@ -1,0 +1,11 @@
+🧠 What Are Local Values in Terraform?
+Local values in Terraform are like temporary variables used to simplify your code.
+
+They help you:
+
+Avoid repeating expressions
+
+Make code cleaner and easier to read
+
+Group logic or calculations in one place
+
