@@ -1,0 +1,111 @@
+🌱 1. Variables
+📘 What it is:
+Variables in Terraform are like placeholders. They let you reuse values without hardcoding them everywhere.
+
+variable "region" {
+  default = "us-east-1"
+}
+You can now use var.region instead of typing "us-east-1" everywhere.
+
+🏭 Production Use Case:
+Imagine you're deploying infrastructure in multiple AWS regions. Instead of changing the region manually in every file, you define a variable:
+provider "aws" {
+  region = var.region
+}
+
+
+terraform apply -var="region=us-west-2" ( it will overrides)
+
+📤 2. Output Variables
+Output variables let you see important information after Terraform finishes running — like IP addresses, ARNs, or URLs.
+output "instance_ip" {
+  value = aws_instance.web.public_ip
+}
+
+
+🏭 Production Use Case:
+After deploying an EC2 instance, you want to know its public IP to SSH into it or configure DNS. Terraform will show it like this:
+Outputs:
+
+instance_ip = "3.91.24.56"
+
+🔗 3. Resource Attributes & Dependencies
+📘 What it is:
+Terraform automatically understands which resources depend on others by looking at how they reference each other.
+
+🧠 Simple Example:
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "subnet1" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+Here, the subnet depends on the VPC. Terraform will create the VPC first, then the subnet.
+
+🏭 Production Use Case:
+In a real-world setup, you might have:
+
+A VPC
+Subnets
+EC2 instances inside those subnets
+Terraform ensures the correct order of creation and deletion.
+
+🎯 4. Resource Targeting
+📘 What it is:
+Sometimes, you don’t want to apply all resources — just one or two. Resource targeting lets you do that.
+
+🧠 Simple Example:
+
+terraform apply -target=aws_instance.web
+This tells Terraform: “Only create or update the web EC2 instance.”
+
+🏭 Production Use Case:
+You’re updating a security group, but don’t want to touch the rest of your infrastructure. You can r
+terraform apply -target=aws_security_group.web_sg
+
+Concept	What It Does	Real-World Use Case
+Variables	Reuse values across configs	Deploy to different AWS regions
+Output Variables	Show important info after apply	Get EC2 IPs, S3 bucket URLs
+Resource Attributes	Link resources together	Subnet depends on VPC
+Resource Targeting	Apply only specific resources	Update just a security group or EC2 instance
+
+ 5. depends_on
+📘 What it is:
+Terraform usually figures out dependencies automatically by looking at references between resources. But sometimes, you need to manually tell Terraform that one resource must wait for another — even if there’s no direct reference.
+
+That’s where depends_on comes in.
+
+resource "aws_iam_role" "lambda_role" {
+  name = "lambda-role"
+  # ... other config
+}
+
+resource "aws_lambda_function" "my_lambda" {
+  function_name = "my-function"
+  role          = aws_iam_role.lambda_role.arn
+  # ... other config
+
+  depends_on = [aws_iam_role.lambda_role]
+}
+
+🏭 Production Use Case:
+Let’s say you’re creating:
+
+An S3 bucket
+A Lambda function
+A CloudWatch log group
+You want to make sure the log group is created before the Lambda function starts writing logs — but there’s no direct reference between them.
+
+resource "aws_cloudwatch_log_group" "lambda_logs" {
+  name = "/aws/lambda/my-function"
+}
+
+resource "aws_lambda_function" "my_lambda" {
+  function_name = "my-function"
+  # ... other config
+
+  depends_on = [aws_cloudwatch_log_group.lambda_logs]
+}
