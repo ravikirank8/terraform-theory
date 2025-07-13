@@ -1,0 +1,29 @@
+🧠 What is a Terraform Workspace?
+
+| Feature          | Value                                               |
+| ---------------- | --------------------------------------------------- |
+| Purpose          | Manage multiple environments with one codebase      |
+| State Management | Each workspace has its own `.tfstate`               |
+| Limitations      | Doesn’t change backend/provider setup automatically |
+
+A Terraform workspace is a way to manage multiple states for the same configuration.
+Because each workspace has its own Terraform state
+
+
+It lets you use the same .tf code for different environments like:
+
+✅ dev
+
+✅ staging
+
+✅ prod
+
+Each workspace has its own state file, so resources don't conflict with each other.
+
+| Command                             | What it Does                  |
+| ----------------------------------- | ----------------------------- |
+| `terraform workspace list`          | List all workspaces           |
+| `terraform workspace new <name>`    | Create a new workspace        |
+| `terraform workspace select <name>` | Switch to another workspace   |
+| `terraform workspace show`          | Show the current workspace    |
+| `terraform workspace delete <name>` | Delete a workspace (careful!) |
