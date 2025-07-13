@@ -1,0 +1,76 @@
+
+
+🧱 PART 1: DYNAMIC BLOCK (Step-by-Step)
+
+✅ Goal:
+Create a security group that opens multiple ports (80, 443, 22) without repeating code.
+
+🔹 STEP 1: Define the variable
+You want to allow traffic on different ports. Define a list of ports using a variable:
+
+variable "ports" {
+  default = [80, 443, 22]
+}
+This is like saying:
+“Hey Terraform, here are the ports I want to open.”
+
+
+🔹 STEP 2: Use the dynamic block inside the resource
+resource "aws_security_group" "web_sg" {
+  name = "web-sg"
+
+  dynamic "ingress" {
+    for_each = var.ports  # loop through each port in the list
+    content {
+      from_port   = ingress.value  # value of the current port
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+}
+
+Here’s what each part means:
+dynamic "ingress": We’re dynamically creating multiple ingress blocks.
+for_each = var.ports: Loop over the list [80, 443, 22].
+ingress.value: The current port from the loop.
+The block will be repeated 3 times, once for each port.
+
+🧾 What it generates behind the scenes:
+variable "ports" {
+  default = [80, 443, 22]
+}
+With this dynamic block:
+dynamic "ingress" {
+  for_each = var.ports
+  content {
+    from_port   = ingress.value
+    to_port     = ingress.value
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+Will generate:
+ingress {
+  from_port   = 80
+  to_port     = 80
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
+ingress {
+  from_port   = 443
+  to_port     = 443
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
+ingress {
+  from_port   = 22
+  to_port     = 22
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+}
+But you didn't have to write them all manually. Cleaner and safer.
+
+===================
