@@ -1,3 +1,22 @@
+🔷 Dynamic Blocks
+💡 What is it?
+A dynamic block lets you create repeated nested blocks (like ingress, egress, etc.) based on a variable or list, so you don’t have to manually write them out.
+
+🧠 Why use it?
+Use it when you need to loop over a list to create similar blocks inside a resource.
+
+🔷 Splat Expressions
+💡 What is it?
+A splat expression is a shortcut to get a list of values from a list of resources or objects.
+
+🧠 Why use it?
+When you have multiple similar resources and want to extract a specific field from all of them — use splats.
+
+
+| What You're Doing                      | Terraform Feature Used  | Why It Helps                                 |
+| -------------------------------------- | ----------------------- | -------------------------------------------- |
+| Opening many ports in a Security Group | `dynamic` block         | Cleaner config, less duplication             |
+| Getting public IPs of all instances    | Splat (`[*].public_ip`) | Quick access to info from multiple resources |
 
 
 🧱 PART 1: DYNAMIC BLOCK (Step-by-Step)
@@ -74,3 +93,32 @@ ingress {
 But you didn't have to write them all manually. Cleaner and safer.
 
 ===================
+
+✨ PART 2: SPLAT EXPRESSIONS (Step-by-Step)
+
+✅ Goal:
+Launch 3 EC2 instances and get a list of all their public IPs.
+
+🔹 STEP 1: Launch multiple EC2 instances
+resource "aws_instance" "app" {
+  count         = 3
+  ami           = "ami-123456"
+  instance_type = "t2.micro"
+}
+
+count = 3: Creates 3 EC2 instances.
+aws_instance.app[0], [1], [2]: Refer to each one.
+
+🔹 STEP 2: Output all their public IPs using a splat
+output "all_public_ips" {
+  value = aws_instance.app[*].public_ip
+}
+aws_instance.app[*]: Means "all instances"
+.public_ip: Grab only the public_ip from each one
+
+You will get like this:
+[
+  "54.12.34.56",
+  "54.65.78.90",
+  "18.222.111.222"
+]
