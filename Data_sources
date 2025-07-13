@@ -242,3 +242,125 @@ resource "aws_instance" "web_server" {
 }
 But if you don’t have access to that module and only want to read from AWS, stick with the data block approach like above.
 
+
+===========================
+
+✅ Real Production Scenario
+You're part of the App Deployment team.
+The Network team already created:
+
+A VPC (tag:Name = corp-prod-vpc)
+
+Subnets (private and public)
+
+A security group (web-sg) that allows HTTP/HTTPS
+
+Your job:
+
+Launch an EC2 instance
+
+Use the latest hardened AMI built by the DevOps team (e.g., named hardened-ubuntu-*)
+
+Attach the instance to a private subnet
+
+Attach the web security group
+
+Use data sources only to refer to existing components
+
+✅ Complete Terraform Example with Explanations
+hcl
+Copy
+Edit
+provider "aws" {
+  region = "us-east-1"
+}
+🔍 Step 1: Get the existing VPC by tag
+hcl
+Copy
+Edit
+data "aws_vpc" "corp_vpc" {
+  filter {
+    name   = "tag:Name"
+    values = ["corp-prod-vpc"]
+  }
+}
+✅ Purpose: Reads the existing VPC created by the network team, based on the tag Name = corp-prod-vpc.
+
+🔍 Step 2: Get private subnets from that VPC
+h
+Copy
+Edit
+data "aws_subnets" "private_subnets" {
+  filter {
+    name   = "tag:Tier"
+    values = ["private"]
+  }
+
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.corp_vpc.id]
+  }
+}
+✅ Purpose:
+
+Finds all subnets in the VPC that are tagged as Tier = private
+
+You will launch your EC2 in one of these private subnets
+
+🔍 Step 3: Get the security group by name
+hcl
+Copy
+Edit
+data "aws_security_group" "web_sg" {
+  name   = "web-sg"
+  vpc_id = data.aws_vpc.corp_vpc.id
+}
+✅ Purpose:
+
+Finds the security group that allows HTTP/HTTPS
+
+Filters by VPC to ensure it matches the right one
+
+🔍 Step 4: Get the latest AMI for your base image
+hcl
+Copy
+Edit
+data "aws_ami" "latest_hardened_ubuntu" {
+  most_recent = true
+  owners      = ["self"] # Built by your team or CI pipeline
+
+  filter {
+    name   = "name"
+    values = ["hardened-ubuntu-*"]
+  }
+}
+✅ Purpose:
+
+Dynamically selects the latest image
+
+Keeps your EC2 always based on the most recent hardened build
+
+🚀 Step 5: Launch the EC2 instance
+hcl
+Copy
+Edit
+resource "aws_instance" "app_server" {
+  ami                         = data.aws_ami.latest_hardened_ubuntu.id
+  instance_type               = "t3.medium"
+  subnet_id                   = data.aws_subnets.private_subnets.ids[0]
+  vpc_security_group_ids      = [data.aws_security_group.web_sg.id]
+  associate_public_ip_address = false
+
+  tags = {
+    Name        = "corp-prod-app-server"
+    Environment = "production"
+    Owner       = "app-team"
+  }
+}
+✅ Purpose:
+
+Launches the EC2 instance with:
+The latest hardened AMI
+In a private subnet (for security)
+Using the existing web security group
+No public IP (because it’s in a private subnet)
