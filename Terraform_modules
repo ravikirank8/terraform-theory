@@ -1,0 +1,394 @@
+✅ What is a Terraform Module?
+A module is a reusable block of Terraform code.
+You can think of it like a function in programming or a blueprint — you define it once and use it many times.
+
+📦 Why Use Modules?
+| Reason                    | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| ✅ Reusability             | Write once, use in multiple environments or projects |
+| ✅ Maintainability         | Centralize logic, so changes happen in one place     |
+| ✅ Team Collaboration      | Different teams can work on different modules        |
+| ✅ Environment Consistency | Use same logic across dev, test, prod                |
+
+🧱 Types of Modules
+
+| Type                | Description                                                                  |
+| ------------------- | ---------------------------------------------------------------------------- |
+| **Root Module**     | The main Terraform configuration in your working directory (`main.tf`, etc.) |
+| **Child Module**    | A module called from the root or from another module                         |
+| **External Module** | Modules from Git, Terraform Registry, or URLs                                |
+
+🛠️ Basic Structure of a Module
+🗂️ Folder Structure:
+/project-root
+  ├── main.tf               # Root module
+  ├── modules/
+  │     └── ec2/
+  │          ├── main.tf    # Module logic
+  │          ├── variables.tf
+  │          └── outputs.tf
+
+
+✅ 1. How to Define a Module (Child Module)
+🔧 modules/ec2/main.tf:
+
+resource "aws_instance" "this" {
+  ami           = var.ami
+  instance_type = var.instance_type
+
+  tags = {
+    Name = var.name
+  }
+}
+🔧 modules/ec2/variables.tf:
+
+variable "ami" {
+  description = "AMI ID to use"
+  type        = string
+}
+
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+}
+
+variable "name" {
+  description = "Name tag"
+  type        = string
+}
+🔧 modules/ec2/outputs.tf:
+
+output "instance_id" {
+  value = aws_instance.this.id
+}
+
+==============
+
+✅ 2. How to Use a Module
+🔧 main.tf (root module):
+hcl
+Copy
+Edit
+module "web_server" {
+  source        = "./modules/ec2"
+  ami           = "ami-12345678"
+  instance_type = "t2.micro"
+  name          = "web-app"
+}
+
+✅ This tells Terraform:
+"Go to ./modules/ec2, use that logic, and pass in the values I specified."
+
+
+===========
+
+🌐 3. Use Modules from Terraform Registry or Git
+📦 Use from Terraform Registry:
+h
+Copy
+Edit
+module "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "5.0.0"
+
+  name = "my-vpc"
+  cidr = "10.0.0.0/16"
+  ...
+}
+📦 Use from Git:
+
+module "network" {
+  source = "git::https://github.com/my-org/terraform-network-module.git"
+}
+
+📥 4. Input Variables (How to Pass Data Into Modules)
+Just like function arguments in programming.
+
+module "web" {
+  source        = "./modules/ec2"
+  ami           = var.app_ami
+  instance_type = "t3.micro"
+  name          = "myapp"
+}
+
+📤 5. Outputs (How to Get Data Out of Modules)
+Outputs from a module can be accessed like this:
+
+output "web_instance_id" {
+  value = module.web.instance_id
+}
+
+🔁 6. For_each & Count in Modules (Loops!)
+You can create multiple instances of a module dynamically:
+
+
+module "servers" {
+  source        = "./modules/ec2"
+  for_each      = toset(["app1", "app2", "app3"])
+  ami           = "ami-123456"
+  instance_type = "t2.micro"
+  name          = each.value
+}
+✅ This creates 3 EC2 instances, one per item in the list.
+
+
+🧩 7. Nested Modules
+Modules can call other modules, like:
+
+module "network" {
+  source = "./modules/network"
+}
+
+module "servers" {
+  source   = "./modules/ec2"
+  vpc_id   = module.network.vpc_id
+  ...
+}
+
+
+✅ 8. Best Practices for Modules
+| Best Practice                         | Explanation                                                      |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| 📁 One module per resource type       | Keep code clean and modular (e.g., ec2, vpc, sg separately)      |
+| 📥 Always define `variables.tf`       | List all expected inputs clearly                                 |
+| 📤 Always define `outputs.tf`         | Expose important outputs like IDs, IPs, etc.                     |
+| 🔒 Lock versions for external modules | Use `version = "..."` for stability                              |
+| 💬 Use descriptions for variables     | Helps others understand what to pass in                          |
+| 🧪 Write test code (optional)         | Validate module behavior using example usage in a test workspace |
+
+
+
+
+
+
+==============
+
+🧠 Real Production Use Case Example
+You want to deploy a 3-tier architecture:
+VPC → Subnets → Security Groups → EC2
+
+# 📦 Terraform 3-Tier Architecture using Modules
+
+# ✅ Folder Structure (for clarity):
+# ├── main.tf
+# ├── variables.tf
+# ├── outputs.tf
+# ├── modules/
+# │   ├── vpc/
+# │   │   ├── main.tf
+# │   │   ├── variables.tf
+# │   │   └── outputs.tf
+# │   ├── subnet/
+# │   │   ├── main.tf
+# │   │   ├── variables.tf
+# │   │   └── outputs.tf
+# │   ├── sg/
+# │   │   ├── main.tf
+# │   │   ├── variables.tf
+# │   │   └── outputs.tf
+# │   └── ec2/
+# │       ├── main.tf
+# │       ├── variables.tf
+# │       └── outputs.tf
+
+##############################################
+# ROOT MODULE
+##############################################
+# main.tf
+
+provider "aws" {
+  region = var.aws_region
+}
+
+module "vpc" {
+  source = "./modules/vpc"
+  name   = var.vpc_name
+  cidr   = var.vpc_cidr
+  tags   = var.tags
+}
+
+module "subnets" {
+  source        = "./modules/subnet"
+  vpc_id        = module.vpc.vpc_id
+  public_count  = 2
+  private_count = 2
+  cidr_prefix   = "24"
+  tags          = var.tags
+}
+
+module "security_groups" {
+  source = "./modules/sg"
+  vpc_id = module.vpc.vpc_id
+  tags   = var.tags
+}
+
+module "ec2" {
+  source        = "./modules/ec2"
+  ami           = var.ami_id
+  instance_type = var.instance_type
+  subnet_id     = module.subnets.private_subnet_ids[0]
+  sg_id         = module.security_groups.web_sg_id
+  name          = "app-server"
+  tags          = var.tags
+}
+
+# variables.tf
+variable "aws_region"     { default = "us-east-1" }
+variable "vpc_name"       { default = "prod-vpc" }
+variable "vpc_cidr"       { default = "10.0.0.0/16" }
+variable "ami_id"         { default = "ami-0c55b159cbfafe1f0" } # Example Ubuntu AMI
+variable "instance_type"  { default = "t3.micro" }
+variable "tags" {
+  type = map(string)
+  default = {
+    Environment = "production"
+    Owner       = "DevOps"
+  }
+}
+
+# outputs.tf
+output "ec2_id" {
+  value = module.ec2.instance_id
+}
+
+##############################################
+# MODULE: VPC (modules/vpc)
+##############################################
+# main.tf
+resource "aws_vpc" "this" {
+  cidr_block = var.cidr
+  tags = merge(var.tags, {
+    Name = var.name
+  })
+}
+
+# variables.tf
+variable "name" {}
+variable "cidr" {}
+variable "tags" { type = map(string) }
+
+# outputs.tf
+output "vpc_id" {
+  value = aws_vpc.this.id
+}
+
+##############################################
+# MODULE: SUBNET (modules/subnet)
+##############################################
+# main.tf
+resource "aws_subnet" "public" {
+  count             = var.public_count
+  vpc_id            = var.vpc_id
+  cidr_block        = cidrsubnet("10.0.0.0/16", 8, count.index)
+  map_public_ip_on_launch = true
+  availability_zone = element(data.aws_availability_zones.available.names, count.index)
+
+  tags = merge(var.tags, {
+    Name = "public-${count.index}"
+    Tier = "public"
+  })
+}
+
+resource "aws_subnet" "private" {
+  count             = var.private_count
+  vpc_id            = var.vpc_id
+  cidr_block        = cidrsubnet("10.0.0.0/16", 8, count.index + var.public_count)
+  map_public_ip_on_launch = false
+  availability_zone = element(data.aws_availability_zones.available.names, count.index)
+
+  tags = merge(var.tags, {
+    Name = "private-${count.index}"
+    Tier = "private"
+  })
+}
+
+data "aws_availability_zones" "available" {}
+
+# variables.tf
+variable "vpc_id" {}
+variable "public_count" { default = 2 }
+variable "private_count" { default = 2 }
+variable "cidr_prefix" { default = "24" }
+variable "tags" { type = map(string) }
+
+# outputs.tf
+output "public_subnet_ids" {
+  value = aws_subnet.public[*].id
+}
+output "private_subnet_ids" {
+  value = aws_subnet.private[*].id
+}
+
+##############################################
+# MODULE: SECURITY GROUP (modules/sg)
+##############################################
+# main.tf
+resource "aws_security_group" "web_sg" {
+  name        = "web-sg"
+  description = "Allow HTTP and HTTPS"
+  vpc_id      = var.vpc_id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(var.tags, {
+    Name = "web-sg"
+  })
+}
+
+# variables.tf
+variable "vpc_id" {}
+variable "tags" { type = map(string) }
+
+# outputs.tf
+output "web_sg_id" {
+  value = aws_security_group.web_sg.id
+}
+
+##############################################
+# MODULE: EC2 (modules/ec2)
+##############################################
+# main.tf
+resource "aws_instance" "this" {
+  ami           = var.ami
+  instance_type = var.instance_type
+  subnet_id     = var.subnet_id
+  vpc_security_group_ids = [var.sg_id]
+
+  tags = merge(var.tags, {
+    Name = var.name
+  })
+}
+
+# variables.tf
+variable "ami" {}
+variable "instance_type" {}
+variable "subnet_id" {}
+variable "sg_id" {}
+variable "name" {}
+variable "tags" { type = map(string) }
+
+# outputs.tf
+output "instance_id" {
+  value = aws_instance.this.id
+}
+
+
