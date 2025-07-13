@@ -87,3 +87,7 @@ If false → no bucket is created
 | Create resource conditionally | `count = var.enabled ? 1 : 0`   |
 | Combine booleans              | `var.a && var.b`                |
 | Number math                   | `var.replicas * 2`              |
+
+
+Variables, Resource Attributes and Dependencies
+
