@@ -1,0 +1,205 @@
+🔍 count vs for_each Summary
+
+| Feature     | `count`                             | `for_each`                              |
+| ----------- | ----------------------------------- | --------------------------------------- |
+| Input Type  | Number or list                      | Set or map                              |
+| Index       | `count.index`                       | `each.key`, `each.value`                |
+| Resource ID | Numeric (`[0]`, `[1]`, ...)         | Keyed (`["dev"]`, `["prod"]`, ...)      |
+| Best For    | Identical items, or conditional res | Named resources, unique properties      |
+| Destroys?   | Changes order = destroy/recreate!   | More stable, avoids unnecessary changes |
+
+🚧 Gotchas
+✅ for_each is safer for named resources
+❌ Using count with lists: changing order may recreate all resources
+✅ Use count when only one value (true/false) controls creation
+
+
+🔢 1. count — Repeat a resource by number
+✅ Use When:
+You need N identical resources
+You have a list of inputs
+
+🧪 Example: Create 3 EC2 instances
+resource "aws_instance" "web" {
+  count         = 3
+  ami           = "ami-123456"
+  instance_type = "t2.micro"
+  tags = {
+    Name = "web-${count.index}"
+  }
+}
+
+This creates:
+aws_instance.web[0]
+aws_instance.web[1]
+aws_instance.web[2]
+
+  🧩 Use Cases for count
+| Use Case                        | Example                       |
+| ------------------------------- | ----------------------------- |
+| Create multiple EC2 instances   | `count = 3`                   |
+| Create multiple subnets         | Based on a list of CIDRs      |
+| Conditionally create a resource | `count = var.enabled ? 1 : 0` |
+
+
+🧮 2. for_each — Loop over a map or set of strings
+✅ Use When:
+You want to name resources uniquely
+You are looping over a map or set, not just a number
+
+🧪 Example: Create multiple S3 buckets from a set
+resource "aws_s3_bucket" "buckets" {
+  for_each = toset(["dev", "staging", "prod"])
+
+  bucket = "my-bucket-${each.key}"
+  acl    = "private"
+}
+
+Creates:
+aws_s3_bucket.buckets["dev"]
+aws_s3_bucket.buckets["staging"]
+aws_s3_bucket.buckets["prod"]
+
+  Another Example: Loop over a map of values
+variable "buckets" = {
+  dev     = "my-dev-bucket"
+  staging = "my-staging-bucket"
+  prod    = "my-prod-bucket"
+}
+
+resource "aws_s3_bucket" "buckets" {
+  for_each = var.buckets
+
+  bucket = each.value
+  acl    = "private"
+}
+
+
+  🧩 Use Cases for for_each
+
+| Use Case                           | Example                                 |
+| ---------------------------------- | --------------------------------------- |
+| Create multiple S3 buckets         | From a list or map of names             |
+| Create IAM users with unique names | `for_each = toset(["user1", "user2"])`  |
+| Loop over maps with custom logic   | Tagging, naming, or resource properties |
+
+
+  ✅ Project Goal
+3 EC2 instances using count
+3 S3 buckets using for_each
+
+🧱 main.tf
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+# -------------------------
+# EC2 Instances using count
+# -------------------------
+resource "aws_instance" "web" {
+  count         = 3
+  ami           = "ami-0c55b159cbfafe1f0"  # Use valid AMI for your region
+  instance_type = "t2.micro"
+
+  tags = {
+    Name = "web-server-${count.index}"
+  }
+}
+
+  🔍 What this does:
+Creates 3 EC2 instances.
+
+Each instance will have a tag:
+web-server-0
+web-server-1
+web-server-2
+
+✅ Why use count?
+You want N identical things (e.g., same AMI, same instance type).
+
+The only thing that changes is the number/index.
+
+🧠 count.index gives the position of the instance in the list (starting from 0).
+======
+
+# --------------------------
+# S3 Buckets using for_each
+# --------------------------
+variable "bucket_names" {
+  default = ["dev", "stage", "prod"]
+}
+
+resource "aws_s3_bucket" "buckets" {
+  for_each = toset(var.bucket_names)
+
+  bucket = "my-app-${each.key}-bucket-123456"  # Make it globally unique
+  acl    = "private"
+
+  tags = {
+    Environment = each.key
+  }
+}
+========
+🔍 What this does:
+Creates 3 S3 buckets with names like:
+
+my-app-dev-bucket-123456
+
+my-app-stage-bucket-123456
+
+my-app-prod-bucket-123456
+
+Each is tagged with its environment name.
+
+✅ Why use for_each?
+You want to loop over named values (like "dev", "prod").
+
+Each item should have a unique identity (like a tag or name).
+
+🧠 each.key gives the name of the current item (e.g., "dev")
+
+
+🔧 variables.tf
+variable "bucket_names" {
+  description = "List of environments for S3 buckets"
+  type        = list(string)
+  default     = ["dev", "stage", "prod"]
+}
+
+
+📤 outputs.tf
+# Output public IPs of EC2 instances
+output "web_instance_public_ips" {
+  value = [for i in aws_instance.web : i.public_ip]
+}
+
+# Output bucket names
+output "bucket_names" {
+  value = [for b in aws_s3_bucket.buckets : b.id]
+}
+
+
+
+
+📤 outputs.tf Explanation
+
+output "web_instance_public_ips" {
+  value = [for i in aws_instance.web : i.public_ip]
+}
+Loops through the EC2 instances and outputs their public IPs.
+
+output "bucket_names" {
+  value = [for b in aws_s3_bucket.buckets : b.id]
+}
+Loops through all S3 buckets and outputs their bucket names (IDs).
+
+🧩 Summary: When to Use count vs for_each
+| Use Case                                                  | Use                         |
+| --------------------------------------------------------- | --------------------------- |
+| You want **3 EC2 instances**, same setup                  | ✅ `count = 3`               |
+| You want **1 S3 bucket per environment (dev/stage/prod)** | ✅ `for_each = toset([...])` |
+| You have **identical resources**, just more of them       | Use `count`                 |
+| You have **named/unique resources**                       | Use `for_each`              |
+
+
